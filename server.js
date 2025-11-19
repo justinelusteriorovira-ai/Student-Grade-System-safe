@@ -1,8 +1,9 @@
 import express from "express";
-import mysql from "mysql2";
+import sqlite3 from "sqlite3";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,16 +16,9 @@ app.use(express.static(path.join(__dirname, "public")));
 // =====================================
 // 🧱 DATABASE CONNECTION
 // =====================================
-const db = mysql.createConnection({
-  host: "localhost",
-  user: "root",
-  password: "admin",
-  database: "school_portal_db",
-});
-
-db.connect((err) => {
+const db = new sqlite3.Database('./school_portal.db', (err) => {
   if (err) {
-    console.error("❌ MySQL connection failed:", err);
+    console.error("❌ SQLite connection failed:", err);
   } else {
     console.log("         / \\");
     console.log("        |\\_/|");
@@ -42,7 +36,18 @@ db.connect((err) => {
     console.log("  \\               /");
     console.log("   \\             /");
     console.log("    \\           /");
-    console.log("✅ MySQL connected successfully!");
+    console.log("✅ SQLite connected successfully!");
+    // Enable foreign keys
+    db.run("PRAGMA foreign_keys = ON");
+    // Initialize database if not exists
+    const initSQL = fs.readFileSync('./init_db.sql', 'utf8');
+    db.exec(initSQL, (err) => {
+      if (err) {
+        console.error("❌ Database initialization failed:", err);
+      } else {
+        console.log("✅ Database initialized!");
+      }
+    });
   }
 });
 
@@ -61,7 +66,7 @@ app.post("/login", (req, res) => {
   console.log("Login attempt:", { role, username, password });
   const query =
     "SELECT * FROM users WHERE username = ? AND password = ? AND role = ?";
-  db.query(query, [username, password, role], (err, results) => {
+  db.all(query, [username, password, role], (err, results) => {
     if (err) {
       console.error("❌ Query error:", err);
       return res.status(500).json({ success: false, message: "Server error" });
@@ -73,7 +78,7 @@ app.post("/login", (req, res) => {
       if (role === 'professor') {
         // Fetch professor details
         const profQuery = "SELECT * FROM professors WHERE professor_id = ?";
-        db.query(profQuery, [username], (err, profResults) => {
+        db.all(profQuery, [username], (err, profResults) => {
           if (err) {
             console.error("Error fetching professor data:", err);
             return res.status(500).json({ success: false, message: "Server error" });
@@ -87,7 +92,7 @@ app.post("/login", (req, res) => {
       } else if (role === 'student') {
         // Fetch student details
         const studentQuery = "SELECT * FROM students WHERE student_id = ?";
-        db.query(studentQuery, [username], (err, studentResults) => {
+        db.all(studentQuery, [username], (err, studentResults) => {
           if (err) {
             console.error("Error fetching student data:", err);
             return res.status(500).json({ success: false, message: "Server error" });
@@ -130,7 +135,7 @@ app.get("/api/student/grades/:student_id", (req, res) => {
     WHERE s.student_id = ?;
   `;
 
-  db.query(sql, [student_id], (err, results) => {
+  db.all(sql, [student_id], (err, results) => {
     if (err) return res.status(500).json({ error: err });
     res.json(results);
   });
@@ -155,7 +160,7 @@ app.get("/api/professor/students/:professor_id", (req, res) => {
     WHERE ps.professor_id = ?;
   `;
 
-  db.query(sql, [professor_id], (err, results) => {
+  db.all(sql, [professor_id], (err, results) => {
     if (err) {
       console.error("Query error:", err);
       return res.status(500).json({ error: err });
@@ -175,7 +180,7 @@ app.get("/api/professor/subjects/:professor_id", (req, res) => {
     WHERE ps.professor_id = ?;
   `;
 
-  db.query(sql, [professor_id], (err, results) => {
+  db.all(sql, [professor_id], (err, results) => {
     if (err) return res.status(500).json({ error: err });
     res.json(results);
   });
@@ -186,7 +191,7 @@ app.get("/api/professor/search/:student_id", (req, res) => {
   const { student_id } = req.params;
   const sql = "SELECT * FROM students WHERE student_id = ?";
 
-  db.query(sql, [student_id], (err, results) => {
+  db.all(sql, [student_id], (err, results) => {
     if (err) return res.status(500).json({ error: err });
     res.json(results);
   });
@@ -199,7 +204,7 @@ app.post("/api/professor/enroll", (req, res) => {
     INSERT INTO enrollments (student_id, prof_subject_id)
     VALUES (?, ?)
   `;
-  db.query(sql, [student_id, prof_subject_id], (err, results) => {
+  db.run(sql, [student_id, prof_subject_id], function(err) {
     if (err) return res.status(500).json({ error: err });
     res.json({ message: "✅ Student enrolled successfully!" });
   });
@@ -215,7 +220,7 @@ app.put("/api/professor/grades/:enrollment_id", (req, res) => {
     SET midterm_grade = ?, final_grade = ?, remarks = ?
     WHERE id = ?
   `;
-  db.query(sql, [midterm_grade, final_grade, remarks, enrollment_id], (err, results) => {
+  db.run(sql, [midterm_grade, final_grade, remarks, enrollment_id], function(err) {
     if (err) return res.status(500).json({ error: err });
     res.json({ message: "✅ Grades updated successfully!" });
   });
@@ -240,7 +245,7 @@ app.get("/api/admin/accounts", (req, res) => {
     WHERE u.role IN ('professor', 'student')
     ORDER BY u.role, u.username
   `;
-  db.query(sql, (err, results) => {
+  db.all(sql, (err, results) => {
     if (err) return res.status(500).json({ error: err });
     res.json(results);
   });
@@ -250,10 +255,10 @@ app.get("/api/admin/accounts", (req, res) => {
 app.post("/api/admin/add-professor", (req, res) => {
   const { username, password, full_name, department } = req.body;
   const userSql = "INSERT INTO users (username, password, role) VALUES (?, ?, 'professor')";
-  db.query(userSql, [username, password], (err, userResult) => {
+  db.run(userSql, [username, password], function(err) {
     if (err) return res.status(500).json({ error: err });
     const profSql = "INSERT INTO professors (professor_id, full_name, department) VALUES (?, ?, ?)";
-    db.query(profSql, [username, full_name, department], (err, profResult) => {
+    db.run(profSql, [username, full_name, department], function(err) {
       if (err) return res.status(500).json({ error: err });
       res.json({ message: "Professor added successfully!" });
     });
@@ -264,10 +269,10 @@ app.post("/api/admin/add-professor", (req, res) => {
 app.post("/api/admin/add-student", (req, res) => {
   const { student_id, password, full_name, course, year_level, section } = req.body;
   const userSql = "INSERT INTO users (username, password, role) VALUES (?, ?, 'student')";
-  db.query(userSql, [student_id, password], (err, userResult) => {
+  db.run(userSql, [student_id, password], function(err) {
     if (err) return res.status(500).json({ error: err });
     const studSql = "INSERT INTO students (student_id, full_name, course, year_level, section) VALUES (?, ?, ?, ?, ?)";
-    db.query(studSql, [student_id, full_name, course, year_level, section], (err, studResult) => {
+    db.run(studSql, [student_id, full_name, course, year_level, section], function(err) {
       if (err) return res.status(500).json({ error: err });
       res.json({ message: "Student added successfully!" });
     });
@@ -279,7 +284,7 @@ app.put("/api/admin/edit-professor/:username", (req, res) => {
   const { username } = req.params;
   const { full_name, department } = req.body;
   const sql = "UPDATE professors SET full_name = ?, department = ? WHERE professor_id = ?";
-  db.query(sql, [full_name, department, username], (err, result) => {
+  db.run(sql, [full_name, department, username], function(err) {
     if (err) return res.status(500).json({ error: err });
     res.json({ message: "Professor updated successfully!" });
   });
@@ -290,7 +295,7 @@ app.put("/api/admin/edit-student/:student_id", (req, res) => {
   const { student_id } = req.params;
   const { full_name, course, year_level, section } = req.body;
   const sql = "UPDATE students SET full_name = ?, course = ?, year_level = ?, section = ? WHERE student_id = ?";
-  db.query(sql, [full_name, course, year_level, section, student_id], (err, result) => {
+  db.run(sql, [full_name, course, year_level, section, student_id], function(err) {
     if (err) return res.status(500).json({ error: err });
     res.json({ message: "Student updated successfully!" });
   });
@@ -306,19 +311,19 @@ app.delete("/api/admin/delete/:role/:id", (req, res) => {
       JOIN professor_subjects ps ON e.prof_subject_id = ps.id
       WHERE ps.professor_id = ?
     `;
-    db.query(deleteEnrollmentsSql, [id], (err) => {
+    db.run(deleteEnrollmentsSql, [id], function(err) {
       if (err) return res.status(500).json({ error: err });
       // Delete professor_subjects
       const deleteProfSubjectsSql = "DELETE FROM professor_subjects WHERE professor_id = ?";
-      db.query(deleteProfSubjectsSql, [id], (err) => {
+      db.run(deleteProfSubjectsSql, [id], function(err) {
         if (err) return res.status(500).json({ error: err });
         // Delete from professors
         const deleteProfSql = "DELETE FROM professors WHERE professor_id = ?";
-        db.query(deleteProfSql, [id], (err) => {
+        db.run(deleteProfSql, [id], function(err) {
           if (err) return res.status(500).json({ error: err });
           // Delete from users
           const deleteUserSql = "DELETE FROM users WHERE username = ? AND role = ?";
-          db.query(deleteUserSql, [id, role], (err) => {
+          db.run(deleteUserSql, [id, role], function(err) {
             if (err) return res.status(500).json({ error: err });
             res.json({ message: "Professor account deleted successfully!" });
           });
@@ -328,15 +333,15 @@ app.delete("/api/admin/delete/:role/:id", (req, res) => {
   } else if (role === 'student') {
     // Delete enrollments
     const deleteEnrollmentsSql = "DELETE FROM enrollments WHERE student_id = ?";
-    db.query(deleteEnrollmentsSql, [id], (err) => {
+    db.run(deleteEnrollmentsSql, [id], function(err) {
       if (err) return res.status(500).json({ error: err });
       // Delete from students
       const deleteStudSql = "DELETE FROM students WHERE student_id = ?";
-      db.query(deleteStudSql, [id], (err) => {
+      db.run(deleteStudSql, [id], function(err) {
         if (err) return res.status(500).json({ error: err });
           // Delete from users
           const deleteUserSql = "DELETE FROM users WHERE username = ? AND role = ?";
-          db.query(deleteUserSql, [id, role], (err) => {
+          db.run(deleteUserSql, [id, role], function(err) {
             if (err) return res.status(500).json({ error: err });
             res.json({ message: "Student account deleted successfully!" });
           });
@@ -350,7 +355,7 @@ app.delete("/api/admin/delete/:role/:id", (req, res) => {
 // Get all subjects
 app.get("/api/admin/subjects", (req, res) => {
   const sql = "SELECT * FROM subjects";
-  db.query(sql, (err, results) => {
+  db.all(sql, (err, results) => {
     if (err) return res.status(500).json({ error: err });
     res.json(results);
   });
@@ -360,7 +365,7 @@ app.get("/api/admin/subjects", (req, res) => {
 app.post("/api/admin/assign-professor-subject", (req, res) => {
   const { professor_id, subject_code, section, school_year, semester } = req.body;
   const sql = "INSERT INTO professor_subjects (professor_id, subject_code, section, school_year, semester) VALUES (?, ?, ?, ?, ?)";
-  db.query(sql, [professor_id, subject_code, section, school_year, semester], (err, results) => {
+  db.run(sql, [professor_id, subject_code, section, school_year, semester], function(err) {
     if (err) return res.status(500).json({ error: err });
     res.json({ message: "Professor assigned to subject successfully!" });
   });
@@ -370,7 +375,7 @@ app.post("/api/admin/assign-professor-subject", (req, res) => {
 app.post("/api/admin/add-subject", (req, res) => {
   const { subject_code, description, units } = req.body;
   const sql = "INSERT INTO subjects (subject_code, description, units) VALUES (?, ?, ?)";
-  db.query(sql, [subject_code, description, units], (err, results) => {
+  db.run(sql, [subject_code, description, units], function(err) {
     if (err) return res.status(500).json({ error: err });
     res.json({ message: "Subject added successfully!" });
   });
@@ -385,15 +390,15 @@ app.delete("/api/admin/delete-subject/:subject_code", (req, res) => {
     JOIN professor_subjects ps ON e.prof_subject_id = ps.id
     WHERE ps.subject_code = ?
   `;
-  db.query(deleteEnrollmentsSql, [subject_code], (err) => {
+  db.run(deleteEnrollmentsSql, [subject_code], function(err) {
     if (err) return res.status(500).json({ error: err });
     // Then delete professor_subjects
     const deleteAssignmentsSql = "DELETE FROM professor_subjects WHERE subject_code = ?";
-    db.query(deleteAssignmentsSql, [subject_code], (err) => {
+    db.run(deleteAssignmentsSql, [subject_code], function(err) {
       if (err) return res.status(500).json({ error: err });
       // Finally delete the subject
       const deleteSubjectSql = "DELETE FROM subjects WHERE subject_code = ?";
-      db.query(deleteSubjectSql, [subject_code], (err) => {
+      db.run(deleteSubjectSql, [subject_code], function(err) {
         if (err) return res.status(500).json({ error: err });
         res.json({ message: "Subject deleted successfully!" });
       });
@@ -412,7 +417,7 @@ app.get("/api/admin/assignments", (req, res) => {
     JOIN subjects s ON ps.subject_code = s.subject_code
     ORDER BY p.full_name, ps.subject_code
   `;
-  db.query(sql, (err, results) => {
+  db.all(sql, (err, results) => {
     if (err) return res.status(500).json({ error: err });
     res.json(results);
   });
@@ -423,11 +428,11 @@ app.delete("/api/admin/delete-assignment/:assignment_id", (req, res) => {
   const { assignment_id } = req.params;
   // First delete enrollments
   const deleteEnrollmentsSql = "DELETE FROM enrollments WHERE prof_subject_id = ?";
-  db.query(deleteEnrollmentsSql, [assignment_id], (err) => {
+  db.run(deleteEnrollmentsSql, [assignment_id], function(err) {
     if (err) return res.status(500).json({ error: err });
     // Then delete the assignment
     const deleteAssignmentSql = "DELETE FROM professor_subjects WHERE id = ?";
-    db.query(deleteAssignmentSql, [assignment_id], (err) => {
+    db.run(deleteAssignmentSql, [assignment_id], function(err) {
       if (err) return res.status(500).json({ error: err });
       res.json({ message: "Assignment deleted successfully!" });
     });
@@ -437,7 +442,7 @@ app.delete("/api/admin/delete-assignment/:assignment_id", (req, res) => {
 // =====================================
 //  START SERVER
 // =====================================
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () =>
   console.log(`🚀 Server running at http://localhost:${PORT}`)
 );
@@ -447,7 +452,7 @@ app.delete("/api/professor/enrollments/:enrollment_id", (req, res) => {
   const { enrollment_id } = req.params;
   const sql = "DELETE FROM enrollments WHERE id = ?";
 
-  db.query(sql, [enrollment_id], (err, results) => {
+  db.run(sql, [enrollment_id], function(err) {
     if (err) return res.status(500).json({ error: err });
     res.json({ message: "🗑️ Enrollment deleted successfully!" });
   });
@@ -457,7 +462,7 @@ app.get("/api/getProfSubject/:subject_code", (req, res) => {
   const { subject_code } = req.params;
   const { prof } = req.query;
   const sql = "SELECT id FROM professor_subjects WHERE subject_code = ? AND professor_id = ?";
-  db.query(sql, [subject_code, prof], (err, results) => {
+  db.all(sql, [subject_code, prof], (err, results) => {
     if (err) return res.status(500).json({ error: err });
     if (results.length === 0) return res.json({});
     res.json(results[0]);

@@ -1,77 +1,60 @@
--- Reset database school_portal
-DROP DATABASE IF EXISTS school_portal_db;
-CREATE DATABASE school_portal_db;
-USE school_portal_db;
-
--- ================================
--- 🔐 USERS TABLE (Login Accounts)
--- ================================
+-- login
 CREATE TABLE users (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  username VARCHAR(100) NOT NULL UNIQUE,
-  password VARCHAR(255) NOT NULL,
-  role ENUM('admin', 'professor', 'student') NOT NULL
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT NOT NULL UNIQUE,
+  password TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('admin', 'professor', 'student'))
 );
 
--- ================================
--- 👨‍🎓 STUDENTS TABLE
--- ================================
+-- enrolled students
 CREATE TABLE students (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  student_id VARCHAR(50) NOT NULL UNIQUE,
-  full_name VARCHAR(150) NOT NULL,
-  course VARCHAR(100),
-  year_level INT,
-  section VARCHAR(20)
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id TEXT NOT NULL UNIQUE,
+  full_name TEXT NOT NULL,
+  course TEXT,
+  year_level INTEGER,
+  section TEXT
 );
 
--- ================================
--- 👨‍🏫 PROFESSORS TABLE
--- ================================
+-- teachers
 CREATE TABLE professors (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  professor_id VARCHAR(50) NOT NULL UNIQUE,
-  full_name VARCHAR(150) NOT NULL,
-  department VARCHAR(100)
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  professor_id TEXT NOT NULL UNIQUE,
+  full_name TEXT NOT NULL,
+  department TEXT
 );
 
--- ================================
--- 📘 SUBJECTS TABLE
--- ================================
+-- subjects
 CREATE TABLE subjects (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  subject_code VARCHAR(50) NOT NULL UNIQUE,
-  description VARCHAR(200) NOT NULL,
-  units INT NOT NULL
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  subject_code TEXT NOT NULL UNIQUE,
+  description TEXT NOT NULL,
+  units INTEGER NOT NULL
 );
 
--- ================================
--- 📚 PROFESSOR SUBJECTS TABLE
--- (What each professor teaches)
--- ================================
+
+-- teacher assigned subjects
 CREATE TABLE professor_subjects (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  professor_id VARCHAR(50) NOT NULL,
-  subject_code VARCHAR(50) NOT NULL,
-  section VARCHAR(20),
-  school_year VARCHAR(20),
-  semester ENUM('1st', '2nd', '3rd (Summer)'),
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  professor_id TEXT NOT NULL,
+  subject_code TEXT NOT NULL,
+  section TEXT,
+  school_year TEXT,
+  semester TEXT CHECK (semester IN ('1st', '2nd', '3rd (Summer)')),
   FOREIGN KEY (professor_id) REFERENCES professors(professor_id),
   FOREIGN KEY (subject_code) REFERENCES subjects(subject_code)
 );
 
 
--- ================================
 -- 📝 ENROLLMENTS TABLE
 -- (Links students → professor_subjects)
--- ================================
 CREATE TABLE enrollments (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  student_id VARCHAR(50) NOT NULL,
-  prof_subject_id INT NOT NULL,
-  midterm_grade DECIMAL(5,2),
-  final_grade DECIMAL(5,2),
-  remarks VARCHAR(50),
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id TEXT NOT NULL,
+  prof_subject_id INTEGER NOT NULL,
+  midterm_grade REAL,
+  final_grade REAL,
+  remarks TEXT,
   FOREIGN KEY (student_id) REFERENCES students(student_id),
   FOREIGN KEY (prof_subject_id) REFERENCES professor_subjects(id)
 );

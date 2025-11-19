@@ -50,7 +50,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           <td><input type="number" step="0.01" id="fin-${row.enrollment_id}" value="${
             row.final_grade || ""
           }"></td>
-          <td><input type="text" id="rem-${row.enrollment_id}" value="${(row.remarks || "").toUpperCase()}"></td>
+          <td><input type="text" id="rem-${row.enrollment_id}" value="${(row.remarks || "")}"></td>
           }"></td>
           <td>
             <div class="action-buttons">
